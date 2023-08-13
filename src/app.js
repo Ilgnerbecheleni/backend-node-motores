@@ -8,10 +8,10 @@ const PORT = process.env.PORT || 3333;
 
 // Configuração da conexão com o banco de dados PostgreSQL
 const pool = new Pool({
-  user: 'postgres',
+  user: 'ilgner',
   host: 'localhost',
   database: 'motores',
-  password: 'admin',
+  password: '123456',
   port: 5432,
 });
 
