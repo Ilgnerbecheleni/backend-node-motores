@@ -1,12 +1,12 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const cors = require('cors'); // Importe a biblioteca CORS
+const cors = require('cors');
 const { Pool } = require('pg');
+const ExcelJS = require('exceljs');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
 
-// Configuração da conexão com o banco de dados PostgreSQL
 const pool = new Pool({
   user: 'ilgner',
   host: 'localhost',
@@ -15,43 +15,27 @@ const pool = new Pool({
   port: 5432,
 });
 
-
-// (async () => {
-//     const client = await pool.connect();
-//     try {
-//       const query = `
-//         CREATE TABLE IF NOT EXISTS motors (
-//           id SERIAL PRIMARY KEY,
-//           marca TEXT NOT NULL,
-//           potencia TEXT NOT NULL,
-//           polos TEXT NOT NULL,
-//           carcaca TEXT NOT NULL,
-//           tensao TEXT NOT NULL,
-//           corrente TEXT NOT NULL,
-//           flange TEXT NOT NULL,
-//           modeloFlange TEXT NOT NULL,
-//           rolamentoD TEXT NOT NULL,
-//           rolamentoT TEXT NOT NULL,
-//           codigoSistema TEXT NOT NULL,
-//           created_at TIMESTAMP DEFAULT NOW(),
-//           updated_at TIMESTAMP
-//         )
-//       `;
-//       await client.query(query);
-//       console.log('Table "motors" created successfully.');
-//     } catch (error) {
-//       console.error('Error creating table:', error);
-//     } finally {
-//       client.release();
-//       pool.end();
-//     }
-//   })();
-
-
-app.use(cors()); // Use o CORS antes das rotas
+app.use(cors());
 app.use(bodyParser.json());
 
-// Rota para cadastrar um novo motor
+// Função para criar um arquivo Excel com os dados
+async function createExcelFile(data) {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Dados');
+
+  // Adicionar cabeçalho
+  const headerRow = worksheet.addRow(Object.keys(data[0]));
+  headerRow.font = { bold: true };
+
+  // Adicionar os dados
+  data.forEach(record => {
+    worksheet.addRow(Object.values(record));
+  });
+
+  // Salvar o arquivo Excel em memória
+  return await workbook.xlsx.writeBuffer();
+}
+
 app.post('/api/motors', async (req, res) => {
   const motorData = req.body;
   try {
@@ -71,6 +55,7 @@ app.post('/api/motors', async (req, res) => {
         motorData.codigoSistema,
       ]
     );
+
     res.status(201).json({ message: 'Motor cadastrado com sucesso.' });
   } catch (error) {
     console.error('Error creating motor:', error);
@@ -78,18 +63,32 @@ app.post('/api/motors', async (req, res) => {
   }
 });
 
-// Rota para buscar todos os motores cadastrados
 app.get('/api/motors', async (req, res) => {
-    try {
-      const client = await pool.connect();
-      const result = await client.query('SELECT * FROM motors');
-      client.release();
-      res.status(200).json(result.rows);
-    } catch (error) {
-      console.error('Error fetching motors:', error);
-      res.status(500).json({ error: 'An error occurred while fetching motors.' });
-    }
-  });
+  try {
+    const client = await pool.connect();
+    const result = await client.query('SELECT * FROM motors');
+    client.release();
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error('Error fetching motors:', error);
+    res.status(500).json({ error: 'An error occurred while fetching motors.' });
+  }
+});
+
+// Rota para fazer o download do arquivo Excel com os dados dos motores
+app.get('/api/download', async (req, res) => {
+  try {
+    const motors = await pool.query('SELECT * FROM motors');
+    const excelBuffer = await createExcelFile(motors.rows);
+
+    res.setHeader('Content-Disposition', 'attachment; filename=motores.xlsx');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(excelBuffer);
+  } catch (error) {
+    console.error('Error creating Excel:', error);
+    res.status(500).json({ error: 'An error occurred while creating Excel.' });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
